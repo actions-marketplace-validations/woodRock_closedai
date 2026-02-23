@@ -1,12 +1,15 @@
-import { Parser, Language } from 'web-tree-sitter';
+import { Parser, Language, Query } from 'web-tree-sitter';
 import * as path from 'path';
 import * as fs from 'fs';
 
 let isInitialized = false;
+let parser: Parser | null = null;
+const langCache: Record<string, Language> = {};
 
-async function initializeParser() {
+async function initialize() {
   if (isInitialized) return;
   await Parser.init();
+  parser = new Parser();
   isInitialized = true;
 }
 
@@ -18,15 +21,38 @@ const LANG_WASM_MAP: Record<string, string> = {
   '.py': 'tree-sitter-python.wasm',
 };
 
+const LANG_QUERY_MAP: Record<string, string> = {
+  'tree-sitter-typescript.wasm': `
+    (class_declaration name: (type_identifier) @name) @symbol
+    (function_declaration name: (identifier) @name) @symbol
+    (method_definition name: (property_identifier) @name) @symbol
+    (interface_declaration name: (type_identifier) @name) @symbol
+  `,
+  'tree-sitter-javascript.wasm': `
+    (class_declaration name: (identifier) @name) @symbol
+    (function_declaration name: (identifier) @name) @symbol
+    (method_definition name: (property_identifier) @name) @symbol
+  `,
+  'tree-sitter-python.wasm': `
+    (class_definition name: (identifier) @name) @symbol
+    (function_definition name: (identifier) @name) @symbol
+  `,
+};
+
 async function getLanguage(extension: string) {
   const wasmFile = LANG_WASM_MAP[extension];
   if (!wasmFile) return null;
+
+  if (langCache[wasmFile]) return langCache[wasmFile];
 
   const wasmPath = path.join(process.cwd(), 'vendor', 'tree-sitter', wasmFile);
   if (!fs.existsSync(wasmPath)) {
     throw new Error(`WASM file for ${extension} not found at ${wasmPath}`);
   }
-  return await Language.load(wasmPath);
+  
+  const lang = await Language.load(wasmPath);
+  langCache[wasmFile] = lang;
+  return lang;
 }
 
 export interface SymbolInfo {
@@ -38,23 +64,80 @@ export interface SymbolInfo {
 }
 
 export async function getFileOutline(filePath: string, content: string): Promise<SymbolInfo[]> {
-  await initializeParser();
+  await initialize();
   const ext = path.extname(filePath);
   const lang = await getLanguage(ext);
-  if (!lang) {
+  if (!lang || !parser) {
     throw new Error(`Unsupported language for file: ${filePath}`);
   }
 
-  const parser = new Parser();
   parser.setLanguage(lang);
   const tree = parser.parse(content);
 
+  try {
+    const wasmFile = LANG_WASM_MAP[ext];
+    const queryString = LANG_QUERY_MAP[wasmFile];
+    
+    if (!queryString) {
+      // Fallback to basic traversal if no query defined
+      return getLegacyOutline(tree.rootNode);
+    }
+
+    const query = new Query(lang, queryString);
+    const captures = query.captures(tree.rootNode);
+    console.log('Captures length:', captures.length);
+    const symbols: SymbolInfo[] = [];
+
+    // Group captures by their 'symbol' node
+    const symbolMap = new Map<any, Partial<SymbolInfo>>();
+
+    for (const capture of captures) {
+      if (capture.name === 'symbol') {
+        symbolMap.set(capture.node, {
+          type: capture.node.type,
+          start: { row: capture.node.startPosition.row, column: capture.node.startPosition.column },
+          end: { row: capture.node.endPosition.row, column: capture.node.endPosition.column },
+        });
+      }
+    }
+
+    for (const capture of captures) {
+      if (capture.name === 'name') {
+        console.log('Found name:', capture.node.text);
+        // Find the parent symbol node
+        let parent = capture.node.parent;
+        while (parent) {
+          if (symbolMap.has(parent)) break;
+          parent = parent.parent;
+        }
+        if (parent) {
+          console.log('Found parent for:', capture.node.text);
+          const symbol = symbolMap.get(parent);
+          if (symbol) {
+            symbol.name = capture.node.text;
+          }
+        } else {
+          console.log('No parent found for:', capture.node.text);
+        }
+      }
+    }
+
+    for (const symbol of symbolMap.values()) {
+      if (symbol.name) {
+        symbols.push(symbol as SymbolInfo);
+      }
+    }
+
+    return symbols;
+  } finally {
+    tree.delete();
+  }
+}
+
+function getLegacyOutline(rootNode: any): SymbolInfo[] {
   const symbols: SymbolInfo[] = [];
 
   function traverse(node: any) {
-    let symbol: SymbolInfo | null = null;
-
-    // Simplified extraction logic - can be refined per language
     if (
       node.type === 'class_declaration' ||
       node.type === 'function_declaration' ||
@@ -62,22 +145,16 @@ export async function getFileOutline(filePath: string, content: string): Promise
       node.type === 'interface_declaration' ||
       node.type === 'function_item'
     ) {
-      const nameNode = node.childForFieldName('name') || node.children.find(c => c.type === 'identifier');
+      const nameNode = node.childForFieldName('name') || node.children.find((c: any) => c.type === 'identifier');
       if (nameNode) {
-        symbol = {
+        symbols.push({
           name: nameNode.text,
           type: node.type,
           start: { row: node.startPosition.row, column: node.startPosition.column },
           end: { row: node.endPosition.row, column: node.endPosition.column },
           children: []
-        };
+        });
       }
-    }
-
-    if (symbol) {
-      symbols.push(symbol);
-      // For a flat outline we don't recurse into children for now, 
-      // or we could implement a nested structure.
     }
 
     for (const child of node.children) {
@@ -85,6 +162,7 @@ export async function getFileOutline(filePath: string, content: string): Promise
     }
   }
 
-  traverse(tree.rootNode);
+  traverse(rootNode);
   return symbols;
 }
+
