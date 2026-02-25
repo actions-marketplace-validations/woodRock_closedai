@@ -97,6 +97,8 @@ export interface SymbolInfo {
   type: string;
   start: { row: number; column: number };
   end: { row: number; column: number };
+  startIndex: number;
+  endIndex: number;
   children?: SymbolInfo[];
 }
 
@@ -139,6 +141,8 @@ export async function getFileOutline(filePath: string, content: string): Promise
           type: capture.node.type,
           start: { row: capture.node.startPosition.row, column: capture.node.startPosition.column },
           end: { row: capture.node.endPosition.row, column: capture.node.endPosition.column },
+          startIndex: capture.node.startIndex,
+          endIndex: capture.node.endIndex,
         });
       }
     }
@@ -192,6 +196,8 @@ function getLegacyOutline(rootNode: any): SymbolInfo[] {
           type: node.type,
           start: { row: node.startPosition.row, column: node.startPosition.column },
           end: { row: node.endPosition.row, column: node.endPosition.column },
+          startIndex: node.startIndex,
+          endIndex: node.endIndex,
           children: []
         });
       }

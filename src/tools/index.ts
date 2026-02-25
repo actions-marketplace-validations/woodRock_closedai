@@ -80,6 +80,19 @@ export const toolDefinitions: Tool[] = [
         }
       },
       {
+        name: "patch_file_symbol",
+        description: "Replace a specific symbol (function, class, method) in a file with new content using AST.",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            path: { type: SchemaType.STRING, description: "Relative path to the file." },
+            symbol_name: { type: SchemaType.STRING, description: "The name of the symbol to replace." },
+            new_content: { type: SchemaType.STRING, description: "The new content for the symbol." }
+          },
+          required: ["path", "symbol_name", "new_content"]
+        }
+      },
+      {
         name: "read_file",
         description: "Read the content of a file.",
         parameters: {
@@ -88,6 +101,19 @@ export const toolDefinitions: Tool[] = [
             path: { type: SchemaType.STRING, description: "Relative path to the file." }
           },
           required: ["path"]
+        }
+      },
+      {
+        name: "read_file_lines",
+        description: "Read specific line range from a file (1-indexed).",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            path: { type: SchemaType.STRING, description: "Relative path to the file." },
+            start_line: { type: SchemaType.NUMBER, description: "Starting line number (inclusive, 1-indexed)." },
+            end_line: { type: SchemaType.NUMBER, description: "Ending line number (inclusive, 1-indexed)." }
+          },
+          required: ["path", "start_line", "end_line"]
         }
       },
       {
@@ -499,12 +525,55 @@ export async function executeTool(name: string, args: any, repoRoot: string, cha
       console.log(terminalDiff.trim());
       console.log(pc.gray('------------------'));
 
+    } else if (normalizedName === "patch_file_symbol") {
+      const p = args.path;
+      const symbolName = args.symbol_name;
+      const newContent = args.new_content;
+      const fullPath = sanitizePath(activeRoot, p);
+      
+      if (!fs.existsSync(fullPath)) {
+        throw new Error(`File not found: ${p}`);
+      }
+
+      let fileContent = fs.readFileSync(fullPath, "utf-8");
+      const outline = await getFileOutline(p, fileContent);
+      
+      const symbol = outline.find(s => s.name === symbolName);
+      if (!symbol) {
+        throw new Error(`Symbol ${symbolName} not found in ${p}`);
+      }
+
+      const oldSymbolContent = fileContent.substring(symbol.startIndex, symbol.endIndex);
+      const newFileContent = fileContent.substring(0, symbol.startIndex) + newContent + fileContent.substring(symbol.endIndex);
+      
+      fs.writeFileSync(fullPath, newFileContent);
+      
+      const diffOutput = generateDiff(p, oldSymbolContent, newContent, false);
+      const terminalDiff = generateDiff(p, oldSymbolContent, newContent, true);
+
+      content = { result: `Success: Patched symbol ${symbolName} in ${p}\n\n${diffOutput}` };
+      
+      logInstruction(chatId, 'PATCH_SYMBOL', `${p}#${symbolName}`);
+      console.log(pc.gray('--- Patch Diff ---'));
+      console.log(terminalDiff.trim());
+      console.log(pc.gray('------------------'));
+
     } else if (normalizedName === "read_file") {
       const p = args.path;
       const fullPath = sanitizePath(activeRoot, p);
       const fileContent = fs.readFileSync(fullPath, "utf-8");
       content = { result: fileContent };
       logInstruction(chatId, 'READ', p);
+    } else if (normalizedName === "read_file_lines") {
+      const p = args.path;
+      const start = args.start_line;
+      const end = args.end_line;
+      const fullPath = sanitizePath(activeRoot, p);
+      const fileContent = fs.readFileSync(fullPath, "utf-8");
+      const lines = fileContent.split('\n');
+      const selectedLines = lines.slice(start - 1, end);
+      content = { result: selectedLines.join('\n') };
+      logInstruction(chatId, 'READ_LINES', `${p} (${start}-${end})`);
     } else if (normalizedName === "list_directory") {
       const p = args.path || '.';
       const fullPath = sanitizePath(activeRoot, p);
