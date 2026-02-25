@@ -35,7 +35,9 @@ export function chunkFile(filePath: string, content: string, chunkSize = 1000, o
 
 export async function getEmbedding(text: string): Promise<number[]> {
   const result = await embeddingModel.embedContent(text);
-  return result.embedding.values;
+  // Truncate to 768 dimensions as gemini-embedding-001 returns 3072
+  // but Firestore only supports up to 2048.
+  return result.embedding.values.slice(0, 768);
 }
 
 export async function indexFile(repoRoot: string, relativePath: string) {
