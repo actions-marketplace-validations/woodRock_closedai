@@ -89,7 +89,52 @@ async function getChatHistory(chatId: number, limit = 20) {
     history.push({ role, parts: sanitizedParts });
   }
 
+  // Fetch summary if exists
+  const summaryDoc = await db.collection('summaries').doc(chatId.toString()).get();
+  if (summaryDoc.exists) {
+    history.unshift({
+      role: 'user',
+      parts: [{ text: `CONTEXT SUMMARY of previous conversation:\n${summaryDoc.data()?.text}` }]
+    });
+    history.unshift({
+      role: 'model',
+      parts: [{ text: "Understood. I will use this summary as context for our continued interaction." }]
+    });
+  }
+
   return history;
+}
+
+async function summarizeHistory(chatId: number) {
+  const history = await getChatHistory(chatId, 50);
+  if (history.length < 30) return;
+
+  logInstruction(chatId, 'INFO', 'Summarizing chat history...');
+  const prompt = `Summarize the key points and decisions from the following conversation history between a user and an AI engineer. 
+Focus on technical decisions, file changes made, and current task status.
+Keep it concise but detailed enough to continue work.
+
+History:
+${JSON.stringify(history)}`;
+
+  const summaryModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const result = await summaryModel.generateContent(prompt);
+  const summaryText = result.response.text();
+
+  await db.collection('summaries').doc(chatId.toString()).set({
+    text: summaryText,
+    updatedAt: FieldValue.serverTimestamp()
+  });
+
+  // Optional: delete old history to save space/cost? 
+  // For now, let's just keep it but the summary will be at the start of context.
+}
+
+async function getProjectRules() {
+  const snapshot = await db.collection('project_rules').orderBy('createdAt', 'desc').get();
+  if (snapshot.empty) return "";
+  const rules = snapshot.docs.map(doc => `- [${doc.data().category}] ${doc.data().rule}`).join('\n');
+  return `\nPROJECT RULES:\n${rules}\n`;
 }
 
 export async function processOneMessage(

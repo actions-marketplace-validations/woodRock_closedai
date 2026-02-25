@@ -9,6 +9,7 @@ import { decode } from 'html-entities';
 
 import { getFileOutline } from '../utils/code-intelligence.js';
 import { db } from '../services/firebase.js';
+import { indexFile, semanticSearch } from '../utils/rag.js';
 
 export const toolDefinitions: Tool[] = [
   {
@@ -385,6 +386,48 @@ export const toolDefinitions: Tool[] = [
             }
           },
           required: ["collection"]
+        }
+      },
+      {
+        name: "index_repo",
+        description: "Index the repository for semantic search. This might take a while.",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            paths: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, description: "Optional list of paths to index. If empty, indexes common source files." }
+          }
+        }
+      },
+      {
+        name: "semantic_search",
+        description: "Search the codebase using natural language.",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            query: { type: SchemaType.STRING, description: "The search query." },
+            limit: { type: SchemaType.NUMBER, description: "Number of results to return (default 5)." }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "set_project_rule",
+        description: "Set a project-specific rule or preference (e.g., coding style).",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            rule: { type: SchemaType.STRING, description: "The rule description." },
+            category: { type: SchemaType.STRING, description: "Optional category (e.g., 'style', 'workflow')." }
+          },
+          required: ["rule"]
+        }
+      },
+      {
+        name: "list_project_rules",
+        description: "List all project-specific rules.",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {}
         }
       }
     ]
@@ -942,6 +985,40 @@ export async function executeTool(name: string, args: any, repoRoot: string, cha
       const results: any[] = [];
       snapshot.forEach((doc: any) => results.push({ id: doc.id, ...doc.data() }));
       content = { result: JSON.stringify(results, null, 2) };
+    } else if (normalizedName === "index_repo") {
+      let pathsToIndex = args.paths;
+      if (!pathsToIndex || pathsToIndex.length === 0) {
+        const output = execSync('find . -maxdepth 4 -not -path "*/.*" -not -path "*/node_modules/*" -not -path "*/dist/*" -type f', { cwd: activeRoot }).toString();
+        pathsToIndex = output.split('\n').filter(p => {
+          const ext = path.extname(p);
+          return ['.ts', '.tsx', '.js', '.jsx', '.json', '.md', '.py', '.go', '.rs'].includes(ext);
+        });
+      }
+      
+      logInstruction(chatId, 'RAG', `Indexing ${pathsToIndex.length} files...`);
+      for (const p of pathsToIndex) {
+        if (!p) continue;
+        await indexFile(activeRoot, p);
+      }
+      content = { result: `Success: Indexed ${pathsToIndex.length} files.` };
+    } else if (normalizedName === "semantic_search") {
+      logInstruction(chatId, 'RAG', `Searching: ${args.query}`);
+      const results = await semanticSearch(args.query, args.limit || 5);
+      content = { result: JSON.stringify(results, null, 2) };
+    } else if (normalizedName === "set_project_rule") {
+      const { rule, category = 'general' } = args;
+      logInstruction(chatId, 'RULES', `Setting rule: ${rule}`);
+      await db.collection('project_rules').add({
+        rule,
+        category,
+        createdAt: new Date()
+      });
+      content = { result: `Success: Rule added.` };
+    } else if (normalizedName === "list_project_rules") {
+      logInstruction(chatId, 'RULES', 'Listing rules');
+      const snapshot = await db.collection('project_rules').orderBy('createdAt', 'desc').get();
+      const rules = snapshot.docs.map(doc => `- [${doc.data().category}] ${doc.data().rule}`).join('\n');
+      content = { result: rules || "No rules defined." };
     } else {
       content = { error: `Unknown tool: ${name}` };
       logInstruction(chatId, 'ERROR', `Model tried to call unknown tool: ${name}`);
