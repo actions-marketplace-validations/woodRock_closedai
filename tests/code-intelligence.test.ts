@@ -51,4 +51,85 @@ describe('getFileOutline', () => {
   it('should throw error for unsupported extensions', async () => {
     await expect(getFileOutline('test.txt', 'some text')).rejects.toThrow('Unsupported language');
   });
+
+  it('should extract symbols from a Go file', async () => {
+    const code = `
+      package main
+      type MyStruct struct { Name string }
+      func (m *MyStruct) MyMethod() {}
+      func MyFunction() {}
+    `;
+    const outline = await getFileOutline('test.go', code);
+    const names = outline.map(s => s.name);
+    expect(names).toContain('MyStruct');
+    expect(names).toContain('MyMethod');
+    expect(names).toContain('MyFunction');
+  });
+
+  it('should extract symbols from a Rust file', async () => {
+    const code = `
+      struct MyStruct { name: String }
+      impl MyStruct {
+          fn my_method(&self) {}
+      }
+      fn my_function() {}
+      enum MyEnum { A, B }
+      trait MyTrait {}
+      mod my_mod {}
+    `;
+    const outline = await getFileOutline('test.rs', code);
+    const names = outline.map(s => s.name);
+    expect(names).toContain('MyStruct');
+    expect(names).toContain('MyStruct'); // From impl
+    expect(names).toContain('my_function');
+    expect(names).toContain('MyEnum');
+    expect(names).toContain('MyTrait');
+    expect(names).toContain('my_mod');
+  });
+
+  it('should extract symbols from a Java file', async () => {
+    const code = `
+      public class MyClass {
+          public void myMethod() {}
+      }
+      interface MyInterface {}
+      enum MyEnum {}
+    `;
+    const outline = await getFileOutline('test.java', code);
+    const names = outline.map(s => s.name);
+    expect(names).toContain('MyClass');
+    expect(names).toContain('myMethod');
+    expect(names).toContain('MyInterface');
+    expect(names).toContain('MyEnum');
+  });
+
+  it('should extract symbols from a C++ file', async () => {
+    const code = `
+      class MyClass {
+      public:
+          void myMethod() {}
+      };
+      struct MyStruct {};
+      void myFunction() {}
+      namespace myNamespace {}
+    `;
+    const outline = await getFileOutline('test.cpp', code);
+    const names = outline.map(s => s.name);
+    expect(names).toContain('MyClass');
+    expect(names).toContain('myFunction');
+    expect(names).toContain('MyStruct');
+  });
+
+  it('should extract symbols from a C file', async () => {
+    const code = `
+      void myFunction() {}
+      struct MyStruct { int x; };
+      typedef int MyInt;
+    `;
+    const outline = await getFileOutline('test.c', code);
+    const names = outline.map(s => s.name);
+    expect(names).toContain('myFunction');
+    expect(names).toContain('MyStruct');
+    expect(names).toContain('MyInt');
+  });
 });

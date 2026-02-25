@@ -68,7 +68,6 @@ const LANG_QUERY_MAP: Record<string, string> = {
     (class_specifier name: (type_identifier) @name) @symbol
     (function_definition declarator: (function_declarator declarator: (identifier) @name)) @symbol
     (struct_specifier name: (type_identifier) @name) @symbol
-    (namespace_definition name: (identifier) @name) @symbol
   `,
   'tree-sitter-c.wasm': `
     (function_definition declarator: (function_declarator declarator: (identifier) @name)) @symbol
