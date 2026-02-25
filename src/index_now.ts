@@ -1,4 +1,4 @@
-import { indexFile } from './src/utils/rag.js'
+import { indexFile } from './utils/rag.js'
 import * as fs from 'fs'
 import * as path from 'path'
 import { execSync } from 'child_process'
