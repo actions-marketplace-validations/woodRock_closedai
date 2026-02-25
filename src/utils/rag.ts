@@ -39,6 +39,7 @@ export async function getEmbedding(text: string): Promise<number[]> {
 }
 
 export async function indexFile(repoRoot: string, relativePath: string) {
+  console.log(`>>> Starting indexFile for ${relativePath}`);
   const fullPath = path.join(repoRoot, relativePath);
   if (!fs.existsSync(fullPath)) return;
   
@@ -47,15 +48,18 @@ export async function indexFile(repoRoot: string, relativePath: string) {
 
   const content = fs.readFileSync(fullPath, 'utf-8');
   const chunks = chunkFile(relativePath, content);
+  console.log(`  File ${relativePath} has ${chunks.length} chunks`);
   
   const batch = db.batch();
   const collection = db.collection('code_embeddings');
 
   // Delete old chunks for this file
+  console.log(`  Deleting old chunks for ${relativePath}...`);
   const oldChunks = await collection.where('path', '==', relativePath).get();
   oldChunks.forEach(doc => batch.delete(doc.ref));
 
-  for (const chunk of chunks) {
+  for (const [i, chunk] of chunks.entries()) {
+    console.log(`  Embedding chunk ${i + 1}/${chunks.length}...`);
     const embedding = await getEmbedding(chunk.content);
     const docRef = collection.doc();
     batch.set(docRef, {
@@ -65,6 +69,7 @@ export async function indexFile(repoRoot: string, relativePath: string) {
     });
   }
 
+  console.log(`  Committing batch for ${relativePath}...`);
   await batch.commit();
 }
 
