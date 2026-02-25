@@ -8,7 +8,7 @@ const __dirname = dirname(__filename)
 function launch() {
   console.log('🚀 [Supervisor] Starting bot process...')
 
-  const child = spawn('npx', ['tsx', 'bot.ts', '--poll'], {
+  const child = spawn('npx', ['tsx', 'main.ts', '--poll'], {
     stdio: 'inherit',
     cwd: __dirname,
     shell: true,

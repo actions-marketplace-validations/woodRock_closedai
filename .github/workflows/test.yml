@@ -3,6 +3,8 @@ name: ClosedAI Bot
 on:
   schedule:
     - cron: '*/5 * * * *' # Runs every 5 minutes
+  pull_request:
+    branches: [main]
   workflow_dispatch: # Allows manual triggering
 
 jobs:
@@ -34,7 +36,7 @@ jobs:
         continue-on-error: true # Don't stop if indexes are already up to date or project isn't fully ready
 
       - name: Run ClosedAI Action
-        uses: woodRock/closedai@main
+        uses: ./
         with:
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}

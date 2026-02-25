@@ -9,10 +9,10 @@ dotenv.config({ path: path.resolve(__dirname, '.env') })
 
 import fs from 'fs'
 import { execSync } from 'child_process'
-import { printHeader, logInstruction } from './src/utils/logger.js'
-import { db } from './src/services/firebase.js'
-import { bot } from './src/bot/instance.js'
-import { processOneMessage, checkQueue } from './src/bot/logic.js'
+import { printHeader, logInstruction } from './utils/logger.js'
+import { db } from './services/firebase.js'
+import { bot } from './bot/instance.js'
+import { processOneMessage, checkQueue } from './bot/logic.js'
 
 // --- Validation ---
 const REQUIRED_ENV = ['FIREBASE_SERVICE_ACCOUNT', 'GEMINI_API_KEY', 'TELEGRAM_BOT_TOKEN']
