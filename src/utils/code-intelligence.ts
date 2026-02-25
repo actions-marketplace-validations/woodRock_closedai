@@ -94,7 +94,7 @@ export async function getFileOutline(filePath: string, content: string): Promise
     const symbols: SymbolInfo[] = [];
 
     // Group captures by their 'symbol' node
-    const symbolMap = new Map<number, Partial<SymbolInfo>>();
+    const symbolMap = new Map<any, Partial<SymbolInfo>>();
 
     for (const capture of captures) {
       if (capture.name === 'symbol') {
@@ -111,10 +111,12 @@ export async function getFileOutline(filePath: string, content: string): Promise
         // Find the parent symbol node
         let parent = capture.node.parent;
         while (parent) {
-          if (parent.id !== undefined && symbolMap.has(parent.id)) break;
+          if (symbolMap.has(parent.id)) {
+            break;
+          }
           parent = parent.parent;
         }
-        if (parent && parent.id !== undefined) {
+        if (parent) {
           const symbol = symbolMap.get(parent.id);
           if (symbol) {
             symbol.name = capture.node.text;
