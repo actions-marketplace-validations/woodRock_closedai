@@ -160,4 +160,38 @@ describe('Tools Unit Tests', () => {
     expect(result).toEqual({ error: 'Search failed with status 500' });
   });
 
+  describe('DX Tools', () => {
+    it('format_file should run prettier for .ts files', async () => {
+      (execSync as any).mockReturnValue(Buffer.from('formatted'));
+      const result = await executeTool('format_file', { path: 'src/index.ts' }, repoRoot, chatId, mockSafeSendMessage);
+      expect(execSync).toHaveBeenCalledWith('npx prettier --write "src/index.ts"', expect.any(Object));
+      expect(result).toEqual({ result: 'Success: Formatted src/index.ts\nformatted' });
+    });
+
+    it('format_file should run black for .py files', async () => {
+      (execSync as any).mockReturnValue(Buffer.from('reformatted'));
+      const result = await executeTool('format_file', { path: 'main.py' }, repoRoot, chatId, mockSafeSendMessage);
+      expect(execSync).toHaveBeenCalledWith('black "main.py"', expect.any(Object));
+      expect(result).toEqual({ result: 'Success: Formatted main.py\nreformatted' });
+    });
+
+    it('lint_file should run eslint for .ts files', async () => {
+      (execSync as any).mockReturnValue(Buffer.from('lint clean'));
+      const result = await executeTool('lint_file', { path: 'src/index.ts', fix: true }, repoRoot, chatId, mockSafeSendMessage);
+      expect(execSync).toHaveBeenCalledWith('npx eslint --fix "src/index.ts"', expect.any(Object));
+      expect(result).toEqual({ result: 'Linting passed for src/index.ts\nlint clean' });
+    });
+
+    it('run_tests should run specific file and pattern', async () => {
+      (execSync as any).mockReturnValue(Buffer.from('tests passed'));
+      const result = await executeTool('run_tests', { path: 'tests/tools.test.ts', pattern: 'format_file' }, repoRoot, chatId, mockSafeSendMessage);
+      expect(execSync).toHaveBeenCalledWith('npm test -- tests/tools.test.ts -t "format_file"', expect.any(Object));
+      expect(result).toEqual({ result: 'Tests passed:\n\ntests passed' });
+    });
+
+    it('format_file should return error for unsupported extension', async () => {
+      const result = await executeTool('format_file', { path: 'test.unknown' }, repoRoot, chatId, mockSafeSendMessage);
+      expect(result).toEqual({ error: 'No formatting tool found for extension .unknown' });
+    });
+  });
 });
