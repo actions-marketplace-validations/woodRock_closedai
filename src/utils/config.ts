@@ -1,8 +1,10 @@
 import * as yaml from 'js-yaml'
 import * as fs from 'fs'
 import * as path from 'path'
+import { fileURLToPath } from 'url'
 
-const configPath = path.resolve(process.cwd(), 'config.yaml')
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const configPath = path.resolve(__dirname, '../../config.yaml')
 
 interface Config {
   model: {
