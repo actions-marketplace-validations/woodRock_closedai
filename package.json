@@ -4,10 +4,11 @@
   "description": "",
   "type": "module",
   "scripts": {
-    "start": "tsx bot.ts",
-    "start:poll": "tsx bot.ts --poll",
-    "start:service": "tsx supervisor.ts",
-    "setup": "tsx setup.ts",
+    "start": "tsx src/main.ts",
+    "start:poll": "tsx src/main.ts --poll",
+    "start:service": "tsx src/supervisor.ts",
+    "setup": "tsx src/setup.ts",
+    "index": "tsx src/index_now.ts",
     "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --write ."
